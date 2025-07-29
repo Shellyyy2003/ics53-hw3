@@ -1,3 +1,8 @@
+/*
+    Authors:
+        Thomas Nguyen 20843831
+        Yiwen Wu – 42326616
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,11 +21,103 @@ typedef struct {
 
 int disk[VM_SIZE];
 int memory[MEM_SIZE];
+int priority[NUM_PPAGES];
 PageTableEntry page_table[NUM_VPAGES];
+const char* algorithm = "FIFO";
+int oldest = 0;
+int full = 0;
 
-// two functions need to be implemented
-int page_fault_handler(int vpn); // returns physical page number
-void evict_page_if_needed();     // if full, evict; else do nothing
+void update_LRU(int low) { // Updates LRU priorities
+    for (int i = 0; i < NUM_PPAGES; i++) {
+        if (priority[i] > low)
+            priority[i] -= 1;
+    }
+}
+
+void fill_memory(int vpn, int ppn) { // Fills Memory from Disk
+    int vaddr = vpn * PAGE_SIZE;
+    int paddr = ppn * PAGE_SIZE;
+    for (int i = 0; i < PAGE_SIZE; i++) {
+        memory[ppn + i] = disk[vaddr + i];
+    }
+}
+
+void copy_memory(int vpn, int ppn) { // Copies Memory onto the Disk
+    int vaddr = vpn * PAGE_SIZE;
+    int paddr = ppn * PAGE_SIZE;
+    for (int i = 0; i < PAGE_SIZE; i++) {
+        disk[vaddr + i] = memory[ppn + i];
+    }
+}
+
+int page_fault_handler(int vpn) {
+    if (strcmp(algorithm, "LRU") == 0) { // LRU
+        if (full < NUM_PPAGES) { // Main memory still empty
+            update_LRU(1);
+            priority[full] = full + 1;
+
+            fill_memory(vpn, full);
+
+            return full++;
+        }
+        else { // Evict and replace least recently used
+            for (int i = 0; i < NUM_PPAGES; i++) {
+                if (priority[i] == 1) {
+                    update_LRU(1);
+                    priority[i] = NUM_PPAGES;
+
+                    for (int j = 0; j < NUM_VPAGES; j++) { // Find VPN for page to be evicted
+                        if (page_table[j].valid) {
+                            if (page_table[j].page_number == i) { // Found Page
+                                if (page_table[j].dirty) {
+                                    copy_memory(j, i);
+                                }
+                                fill_memory(vpn, i);
+
+                                page_table[j].page_number = j; // Reset page entry of evicted
+                                page_table[j].valid = 0;
+                                page_table[j].dirty = 0;
+                            }
+                        }
+                    }
+                    return i; // Break loop and return page number
+                }
+            }
+            perror("Main memory full but couldn't evict");
+            return -1;
+        }
+    }
+    else { // FIFO
+        if (full < NUM_PPAGES) { // Main memory still empty
+            priority[full] = 1;
+
+            fill_memory(vpn, full);
+
+            return full++;
+        }
+        else { // Evict and replace oldest
+            for (int j = 0; j < NUM_VPAGES; j++) { // Find VPN for page to be evicted
+                if (page_table[j].valid) {
+                    if (page_table[j].page_number == oldest) { // Found Page
+                        if (page_table[j].dirty) {
+                            copy_memory(j, oldest);
+                        }
+                        fill_memory(vpn, oldest);
+
+                        page_table[j].page_number = j; // Reset page entry of evicted
+                        page_table[j].valid = 0;
+                        page_table[j].dirty = 0;
+                    }
+                    int temp = oldest;
+                    oldest = (oldest + 1) % NUM_PPAGES;
+                    return temp;
+                }
+            }
+            perror("Main memory full but couldn't evict");
+            return -1;
+        }
+    }
+} // returns physical page number
 
 // Util: Virtual address → (vpn, offset)
 void translate(int vaddr, int* vpn, int* offset) {
@@ -47,6 +144,10 @@ void handle_read(int vaddr) {
     int ppn = page_table[vpn].page_number;
     int phys_addr = ppn * PAGE_SIZE + offset;
     printf("%d\n", memory[phys_addr]);
+    if (strcmp(algorithm, "LRU") == 0) { // Added to handle LRU
+        update_LRU(priority[ppn]);
+        priority[ppn] = NUM_PPAGES;
+    }
 }
 
 // Write
@@ -69,6 +170,10 @@ void handle_write(int vaddr, int value) {
     int phys_addr = ppn * PAGE_SIZE + offset;
     memory[phys_addr] = value;
     page_table[vpn].dirty = 1;
+    if (strcmp(algorithm, "LRU") == 0) { // Added to handle LRU
+        update_LRU(priority[ppn]);
+        priority[ppn] = NUM_PPAGES;
+    }
 }
 
 void handle_showmain(int ppn) {
@@ -100,14 +205,20 @@ void initialize_system() {
         page_table[i].dirty = 0;
         page_table[i].page_number = i; // maps to disk initially
     }
+    for (int i = 0; i < NUM_PPAGES; i++) {
+        priority[i] = -1;
+    }
 }
 
 int main(int argc, char* argv[]) {
     initialize_system();
     
-    const char* algorithm = "FIFO";
+    // Moved algorithm init to global
     if (argc == 2) {
-        algorithm = argv[1];
+        if (strcmp(argv[1], "LRU") == 0) // Algorithm only changes if LRU, else FIFO
+            algorithm = argv[1];
+        else if (strcmp(argv[1], "FIFO") == -1)
+            printf("Invalid page replacement algorithm. Defaulting to FIFO");
     }
     printf("Using %s replacement algorithm\n", algorithm);
 
