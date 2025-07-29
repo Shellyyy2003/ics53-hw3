@@ -1,0 +1,18 @@
+LRU
+write 1 11
+write 9 22
+write 14 33
+write 36 44
+write 44 55
+read 1
+read 10
+read 14
+read 36
+read 43
+showmain 0
+showmain 1
+showmain 2
+showmain 3
+showptable
+apple
+quit

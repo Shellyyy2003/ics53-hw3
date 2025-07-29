@@ -23,7 +23,7 @@ int disk[VM_SIZE];
 int memory[MEM_SIZE];
 int priority[NUM_PPAGES];
 PageTableEntry page_table[NUM_VPAGES];
-const char* algorithm = "FIFO";
+char* algorithm = "FIFO";
 int oldest = 0;
 int full = 0;
 
@@ -38,7 +38,7 @@ void fill_memory(int vpn, int ppn) { // Fills Memory from Disk
     int vaddr = vpn * PAGE_SIZE;
     int paddr = ppn * PAGE_SIZE;
     for (int i = 0; i < PAGE_SIZE; i++) {
-        memory[ppn + i] = disk[vaddr + i];
+        memory[paddr + i] = disk[vaddr + i];
     }
 }
 
@@ -46,11 +46,12 @@ void copy_memory(int vpn, int ppn) { // Copies Memory onto the Disk
     int vaddr = vpn * PAGE_SIZE;
     int paddr = ppn * PAGE_SIZE;
     for (int i = 0; i < PAGE_SIZE; i++) {
-        disk[vaddr + i] = memory[ppn + i];
+        disk[vaddr + i] = memory[paddr + i];
     }
 }
 
 int page_fault_handler(int vpn) {
+    int temp = -1; // Returns at function end (Done for 100% line coverage)
     if (strcmp(algorithm, "LRU") == 0) { // LRU
         if (full < NUM_PPAGES) { // Main memory still empty
             update_LRU(1);
@@ -80,11 +81,10 @@ int page_fault_handler(int vpn) {
                             }
                         }
                     }
-                    return i; // Break loop and return page number
+                    temp = i;
+                    break; // Break loop and return page number
                 }
             }
-            perror("Main memory full but couldn't evict");
-            return -1;
         }
     }
     else { // FIFO
@@ -107,16 +107,16 @@ int page_fault_handler(int vpn) {
                         page_table[j].page_number = j; // Reset page entry of evicted
                         page_table[j].valid = 0;
                         page_table[j].dirty = 0;
+
+                        temp = oldest;
+                        oldest = (oldest + 1) % NUM_PPAGES;
+                        break;
                     }
-                    int temp = oldest;
-                    oldest = (oldest + 1) % NUM_PPAGES;
-                    return temp;
                 }
             }
-            perror("Main memory full but couldn't evict");
-            return -1;
         }
     }
+    return temp;
 } // returns physical page number
 
 // Util: Virtual address → (vpn, offset)
@@ -217,8 +217,8 @@ int main(int argc, char* argv[]) {
     if (argc == 2) {
         if (strcmp(argv[1], "LRU") == 0) // Algorithm only changes if LRU, else FIFO
             algorithm = argv[1];
-        else if (strcmp(argv[1], "FIFO") == -1)
-            printf("Invalid page replacement algorithm. Defaulting to FIFO");
+        else if (strcmp(argv[1], "FIFO") != -1)
+            printf("Invalid page replacement algorithm\n");
     }
     printf("Using %s replacement algorithm\n", algorithm);
 

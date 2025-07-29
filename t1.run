@@ -1,0 +1,18 @@
+
+write 0 11
+write 8 22
+write 16 33
+write 32 44
+write 40 55
+read 0
+read 8
+read 16
+read 32
+read 40
+showmain 0
+showmain 1
+showmain 2
+showmain 3
+showptable
+apple
+quit

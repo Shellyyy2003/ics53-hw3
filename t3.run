@@ -1,0 +1,4 @@
+FIFO
+read -1
+write -1
+showmain -1
